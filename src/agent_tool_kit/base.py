@@ -153,63 +153,108 @@ class Tool:
         return self.invoke(kwargs)
 
     def invoke(self, raw_input: dict[str, Any]) -> Any:
-        """Run the tool against a raw input dict; return result or error envelope."""
+        """Run the tool against a raw input dict; return result or error envelope.
+
+        Wrapped in a try/finally so that a leak from any post-handler step
+        (output filter, idempotency cache write) cannot leave a stale entry
+        in ``audit_log._start_times`` and cannot let an exception escape into
+        the agent loop. Every exit path produces a dict.
+        """
         call_id = uuid.uuid4().hex
         if self.audit_log is not None:
             self.audit_log.begin(call_id)
 
-        # 1. Validate input — schema errors become teaching signals.
+        recorded = False
         try:
-            parsed = self.input_model.model_validate(raw_input)
-        except ValidationError as e:
-            err = self._validation_error_to_tool_error(e)
-            envelope = err.to_response()
-            self._record_audit(call_id, raw_input, envelope, error=err)
-            return envelope
+            # 1. Validate input — schema errors become teaching signals.
+            try:
+                parsed = self.input_model.model_validate(raw_input)
+            except ValidationError as e:
+                err = self._validation_error_to_tool_error(e)
+                envelope = err.to_response()
+                self._record_audit(call_id, raw_input, envelope, error=err)
+                recorded = True
+                return envelope
 
-        # 2. Idempotency: short-circuit on cache hit.
-        idem_key: str | None = None
-        if self.idempotent and self.idempotency_cache is not None:
-            idem_key = self._compute_idempotency_key(parsed)
-            cached = self.idempotency_cache.get(self.name, idem_key)
-            if cached is not None:
-                self._record_audit(call_id, raw_input, cached, idempotent_hit=True)
-                return cached
+            # 2. Idempotency: short-circuit on cache hit.
+            idem_key: str | None = None
+            if self.idempotent and self.idempotency_cache is not None:
+                idem_key = self._compute_idempotency_key(parsed)
+                cached = self.idempotency_cache.get(self.name, idem_key)
+                if cached is not None:
+                    self._record_audit(call_id, raw_input, cached, idempotent_hit=True)
+                    recorded = True
+                    return cached
 
-        # 3. Execute handler.
-        try:
-            result = self._call_handler(parsed)
-        except ToolException as te:
-            envelope = te.error.to_response()
-            self._record_audit(call_id, raw_input, envelope, error=te.error)
-            return envelope
-        except Exception as e:  # noqa: BLE001 — last-resort guardrail
-            err = ToolError(
-                category=ErrorCategory.INTERNAL,
-                message=f"Unhandled tool error: {type(e).__name__}: {e}",
-                retryable=False,
-                suggested_action="This is a bug in the tool implementation. Escalate to a human.",
-                details={"exception_type": type(e).__name__},
-            )
-            envelope = err.to_response()
-            self._record_audit(call_id, raw_input, envelope, error=err)
-            return envelope
+            # 3. Execute handler.
+            try:
+                result = self._call_handler(parsed)
+            except ToolException as te:
+                envelope = te.error.to_response()
+                self._record_audit(call_id, raw_input, envelope, error=te.error)
+                recorded = True
+                return envelope
+            except Exception as e:  # noqa: BLE001 — last-resort guardrail
+                err = ToolError(
+                    category=ErrorCategory.INTERNAL,
+                    message=f"Unhandled tool error: {type(e).__name__}: {e}",
+                    retryable=False,
+                    suggested_action=(
+                        "This is a bug in the tool implementation. Escalate to a human."
+                    ),
+                    details={"exception_type": type(e).__name__},
+                )
+                envelope = err.to_response()
+                self._record_audit(call_id, raw_input, envelope, error=err)
+                recorded = True
+                return envelope
 
-        # 4. Optional output filter (post-execution compression).
-        if self.output_filter is not None:
-            result = self.output_filter(result)
+            # 4. Optional output filter (post-execution compression).
+            #    Skip filtering for error envelopes the handler returned directly —
+            #    filters are written for the success shape and shouldn't see errors.
+            if self.output_filter is not None and not _is_error_envelope(result):
+                try:
+                    result = self.output_filter(result)
+                except Exception as e:  # noqa: BLE001 — filter is third-party-ish
+                    err = ToolError(
+                        category=ErrorCategory.INTERNAL,
+                        message=(
+                            f"output_filter raised: {type(e).__name__}: {e}"
+                        ),
+                        retryable=False,
+                        suggested_action=(
+                            "The tool's output filter has a bug. The raw handler "
+                            "result is unavailable; escalate to a human."
+                        ),
+                        details={"exception_type": type(e).__name__},
+                    )
+                    envelope = err.to_response()
+                    self._record_audit(call_id, raw_input, envelope, error=err)
+                    recorded = True
+                    return envelope
 
-        # 5. Cache successful results for idempotent tools.
-        if (
-            self.idempotent
-            and self.idempotency_cache is not None
-            and idem_key is not None
-            and not _is_error_envelope(result)
-        ):
-            self.idempotency_cache.put(self.name, idem_key, result)
+            # 5. Cache successful results for idempotent tools.
+            if (
+                self.idempotent
+                and self.idempotency_cache is not None
+                and idem_key is not None
+                and not _is_error_envelope(result)
+            ):
+                self.idempotency_cache.put(self.name, idem_key, result)
 
-        self._record_audit(call_id, raw_input, result)
-        return result
+            self._record_audit(call_id, raw_input, result)
+            recorded = True
+            return result
+        finally:
+            # Belt-and-braces: if some unforeseen path skips _record_audit (which
+            # is what pops ``_start_times``), drop the stale entry here so the
+            # log doesn't accumulate orphaned timers under repeated misuse.
+            if (
+                not recorded
+                and self.audit_log is not None
+                and call_id in self.audit_log._start_times
+            ):
+                self.audit_log._start_times.pop(call_id, None)
 
     # ------------------------------------------------------------ internals
 
