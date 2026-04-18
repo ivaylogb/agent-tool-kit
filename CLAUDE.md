@@ -49,6 +49,16 @@ config = AgentConfig(name="orders", components={}, tool_schemas=reg.all_schemas(
 runner = AgentRunner(config=config, tool_handlers=get_handlers())
 ```
 
+**Schema-precedence trap (read this).** `AgentRunner._build_tool_definitions` walks `config.tool_schemas` first and only then looks at `handler.tool_schema`. If the same tool name appears in both sources, the **config wins** silently. Practical implication: if you load an `agent-eval-loop` config from YAML AND attach toolkit tools whose `tool_schema` carries a richer description (scope restrictions, output documentation), the YAML's older description gets sent to Anthropic and the toolkit's better one is ignored.
+
+Two ways to avoid this:
+- **Pure-toolkit path**: build `AgentConfig` in Python with `tool_schemas=registry.all_schemas()` (as in the snippet above) and don't list a `tools` component in the config — the toolkit becomes the source of truth.
+- **YAML-first path**: keep the YAML as the source of truth, accept that the toolkit's `tool_schema` is unused on the wire, and rely on the toolkit only for handler execution / observability / idempotency.
+
+Don't mix the two without knowing which schema the API will see.
+
+Note also that `AgentRunner.tool_calls[i].error` is `str | None` populated only from raised exceptions — toolkit tools never raise, so that field will always be `None`. Error envelopes land in `tool_calls[i].result` as `{"error": {...}}`. Judges that count failures by `error is not None` will under-count; check the result dict for an `"error"` key instead.
+
 The e-commerce example matches the tool **names** used by `../agent-eval-loop/examples/customer_support/` so `get_handlers()` slots in mechanically as that example's `mocks.py`. **Caveat on error envelope keys**: agent-eval-loop's `customer_support/components/tools/v1.yaml` documents errors with a `code` field (`order_not_found`, `outside_window`, etc.). Toolkit envelopes use `category` instead, with toolkit-standard category strings (`not_found`, `precondition_failed`, etc.). The agent will usually cope — both names convey the same meaning — but if the YAML's "Errors:" prose is load-bearing for the agent, update either the YAML to describe `category`/`message`/`suggested_action`, or write a small adapter that re-keys envelopes back to `code`. The toolkit's keys are the better surface; we recommend updating the YAML.
 
 ## Best practices encoded
