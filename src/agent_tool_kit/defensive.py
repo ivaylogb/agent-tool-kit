@@ -63,10 +63,20 @@ class CircuitState(str, Enum):
 class CircuitBreaker:
     """Thread-safe circuit breaker.
 
-    Default policy: 5 consecutive failures opens the breaker for 30 seconds.
-    During the open window all calls fail fast. After the cooldown, one
-    trial call is allowed; if it succeeds the breaker closes, if it fails
-    the cooldown restarts.
+    Default policy: 5 consecutive **outcomes recorded as failures** open the
+    breaker for 30 seconds. During the open window all calls fail fast. After
+    the cooldown, one trial call is allowed; if it succeeds the breaker
+    closes, if it fails the cooldown restarts.
+
+    Granularity note: when paired with ``defensive_call``, the unit of
+    failure is one *invocation* of ``defensive_call``, not one upstream
+    attempt. A defensive call configured with ``RetryPolicy(max_attempts=3)``
+    that exhausts all 3 retries records exactly **one** failure on the
+    breaker — the breaker sees user-visible outcomes, not internal retries.
+    This matches the behavior of production breakers (Hystrix-style command
+    semantics) and prevents retried-then-recovered calls from inappropriately
+    moving the breaker toward open. If you want each upstream attempt to
+    count, omit the retry policy and let the caller drive retries.
     """
 
     def __init__(
@@ -202,9 +212,15 @@ def defensive_call(
     ``ToolError`` — the agent reasons about the category to choose its
     next move. Successful results are passed through unchanged.
 
-    The breaker (if provided) records the outcome of each attempt:
-    successful return closes it, any raised failure (including timeout)
-    counts toward the failure threshold.
+    Breaker accounting: the breaker (if provided) sees **one outcome per
+    defensive_call invocation**, not one per retry attempt. If
+    ``retry_policy`` succeeds on the second attempt, the breaker records a
+    success. If retries are exhausted, the breaker records exactly one
+    failure regardless of how many internal attempts ran. This is intentional
+    — it matches Hystrix-style command semantics and means a
+    ``CircuitBreaker(failure_threshold=N)`` opens after N consecutive
+    *user-visible* failures, not N internal attempts. See ``CircuitBreaker``
+    for the rationale.
     """
     if circuit_breaker is not None and not circuit_breaker.allow():
         raise ToolException(
