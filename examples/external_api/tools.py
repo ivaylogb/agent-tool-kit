@@ -61,17 +61,22 @@ def build_weather_tool(
     metrics, or share the cache across multiple tools without reaching into
     the closure.
     """
-    api = api or FakeWeatherAPI()
-    audit_log = audit_log or AuditLog()
-    cache = cache or IdempotencyCache()
-    retry_policy = retry_policy or RetryPolicy(
+    # Use ``is not None`` rather than ``or`` because IdempotencyCache and AuditLog
+    # define ``__len__``, so an empty instance is falsy under truthy-coercion and
+    # would be silently replaced with a fresh one — discarding the caller's choice.
+    api = api if api is not None else FakeWeatherAPI()
+    audit_log = audit_log if audit_log is not None else AuditLog()
+    cache = cache if cache is not None else IdempotencyCache()
+    retry_policy = retry_policy if retry_policy is not None else RetryPolicy(
         max_attempts=3,
         base_delay=0.05,
         max_delay=0.2,
         multiplier=2.0,
         jitter=0.0,
     )
-    breaker = breaker or CircuitBreaker(failure_threshold=3, cooldown_seconds=2.0)
+    breaker = breaker if breaker is not None else CircuitBreaker(
+        failure_threshold=3, cooldown_seconds=2.0,
+    )
 
     @tool(
         name="get_current_weather",
