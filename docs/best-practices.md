@@ -123,6 +123,16 @@ The cache key is a hash over the named fields. On a duplicate call, the first re
 
 `idempotency_key_fields` matters: `reason` is free-form text the agent might phrase slightly differently between calls. Excluding it from the key means the dedup actually works.
 
+### Session scoping — two equivalent patterns
+
+The `agent-eval-loop` best-practices document phrases this as "keys derived from the session ID and action parameters." The toolkit achieves the same outcome by a different mechanism — pick whichever fits your deployment:
+
+1. **Per-session cache instance (recommended for in-memory).** Construct a fresh `IdempotencyCache` per session and pass it into your tools. Two sessions never see each other's cache because they hold independent instances. This is what `examples/ecommerce/build_registry()` does. Simple, no key manipulation, no cross-session leakage.
+
+2. **Session ID in the key (recommended for distributed caches).** When the cache backend is shared across processes (Redis, Memcached), put `session_id` in the input model and include it in `idempotency_key_fields`. Then a single shared cache stores per-(session, action) entries. Use this when you can't afford one cache instance per session.
+
+Both produce identical observed behavior; the choice is operational.
+
 ---
 
 ## Defensive composition for unreliable upstreams
