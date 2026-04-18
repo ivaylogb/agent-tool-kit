@@ -20,6 +20,7 @@ from __future__ import annotations
 from typing import Any, Iterable
 
 from agent_tool_kit.base import Tool
+from agent_tool_kit.errors import ErrorCategory, ToolError
 
 
 class CapabilityRegistry:
@@ -117,11 +118,14 @@ class CapabilityRegistry:
         t = self._tools.get(name)
         if t is None:
             available = ", ".join(sorted(self._tools.keys())) or "<empty>"
-            return {
-                "error": {
-                    "category": "not_found",
-                    "message": f"Tool {name!r} is not registered. Available: {available}",
-                    "retryable": False,
-                }
-            }
+            return ToolError(
+                category=ErrorCategory.NOT_FOUND,
+                message=f"Tool {name!r} is not registered. Available: {available}",
+                retryable=False,
+                suggested_action=(
+                    "Re-issue the call with one of the available tool names "
+                    "above, or stop and ask the user for clarification."
+                ),
+                details={"available_tools": sorted(self._tools.keys())},
+            ).to_response()
         return t.invoke(arguments)
