@@ -49,7 +49,7 @@ config = AgentConfig(name="orders", components={}, tool_schemas=reg.all_schemas(
 runner = AgentRunner(config=config, tool_handlers=get_handlers())
 ```
 
-The e-commerce example deliberately matches the tool names and shapes used by `../agent-eval-loop/examples/customer_support/` so `get_handlers()` is a drop-in replacement for that example's `mocks.py`.
+The e-commerce example matches the tool **names** used by `../agent-eval-loop/examples/customer_support/` so `get_handlers()` slots in mechanically as that example's `mocks.py`. **Caveat on error envelope keys**: agent-eval-loop's `customer_support/components/tools/v1.yaml` documents errors with a `code` field (`order_not_found`, `outside_window`, etc.). Toolkit envelopes use `category` instead, with toolkit-standard category strings (`not_found`, `precondition_failed`, etc.). The agent will usually cope — both names convey the same meaning — but if the YAML's "Errors:" prose is load-bearing for the agent, update either the YAML to describe `category`/`message`/`suggested_action`, or write a small adapter that re-keys envelopes back to `code`. The toolkit's keys are the better surface; we recommend updating the YAML.
 
 ## Best practices encoded
 - **Schema-as-feedback** — Pydantic `Field(description=...)` and constraints become the agent's self-correction signal. Bad inputs return `invalid_input` with the failing field named.

@@ -45,4 +45,12 @@ runner.send_message("Where is order ORD-78234?")
 
 For the full customer-support workflow (instructions, routines, scenarios),
 swap `agent_eval_loop`'s `examples/customer_support/mocks.py` for
-`get_handlers()` from this module — the tool names and shapes match.
+`get_handlers()` from this module — the tool names match.
+
+**Error envelope key caveat**: customer_support's `components/tools/v1.yaml`
+documents errors with a `code` field (e.g., `order_not_found`,
+`outside_window`); toolkit envelopes use `category` (e.g., `not_found`,
+`precondition_failed`). The agent generally infers the meaning, but for
+exact prose alignment update the YAML's `errors:` block to reference
+`category`/`message`/`suggested_action`, or wrap each handler with an
+adapter that re-keys the envelope.

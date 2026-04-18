@@ -107,7 +107,7 @@ Each prints menu/schema previews, exercises the success path, exercises the erro
 
 Every `Tool` in this package is a callable with a `tool_schema` attribute. That's the exact contract `agent_eval_loop.agent.runner.AgentRunner.tool_handlers` expects, so you can mix and match without adapters.
 
-The e-commerce example deliberately matches the tool names and shapes used by `../agent-eval-loop/examples/customer_support/`, so `examples.ecommerce.tools.get_handlers()` is a drop-in replacement for that example's `mocks.py`.
+The e-commerce example matches the tool **names** used by `../agent-eval-loop/examples/customer_support/`, so `examples.ecommerce.tools.get_handlers()` slots in mechanically as that example's `mocks.py`. **One caveat**: error envelopes use `category` (toolkit convention) where the customer_support YAML documents `code`. The agent typically copes, but if you want exact prose alignment, update either the YAML's `errors:` block or write a small re-keying adapter — see `CLAUDE.md` for details.
 
 ---
 
