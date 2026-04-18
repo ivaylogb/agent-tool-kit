@@ -247,14 +247,10 @@ class Tool:
             return result
         finally:
             # Belt-and-braces: if some unforeseen path skips _record_audit (which
-            # is what pops ``_start_times``), drop the stale entry here so the
+            # is what pops the pending timer), drop the stale entry here so the
             # log doesn't accumulate orphaned timers under repeated misuse.
-            if (
-                not recorded
-                and self.audit_log is not None
-                and call_id in self.audit_log._start_times
-            ):
-                self.audit_log._start_times.pop(call_id, None)
+            if not recorded and self.audit_log is not None:
+                self.audit_log.discard_pending(call_id)
 
     # ------------------------------------------------------------ internals
 
