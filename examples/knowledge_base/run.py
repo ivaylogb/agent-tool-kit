@@ -23,7 +23,7 @@ def main() -> None:
 
     print("===== Capability menu =====")
     for entry in registry.menu():
-        print(f"- {entry['name']}: {entry['summary']}")
+        print(f"- {entry['name']}: {entry['description']}")
 
     print("\n===== search_knowledge_base — compressed result =====")
     result = registry.execute(

@@ -74,8 +74,14 @@ class ToolClassifier:
         menu = self.registry.menu()
         if not menu:
             return []
-        menu_text = "\n".join(f"- {m['name']}: {m['summary']}" for m in menu)
-        system = CLASSIFIER_SYSTEM_PROMPT_TEMPLATE.format(menu=menu_text)
+        menu_lines: list[str] = []
+        for m in menu:
+            tags = ", ".join(m.get("tags", [])) or "(no tags)"
+            line = f"- {m['name']}: {m['description']} [tags: {tags}]"
+            if m.get("when_not_to_use"):
+                line += f"\n    NOT FOR: {m['when_not_to_use']}"
+            menu_lines.append(line)
+        system = CLASSIFIER_SYSTEM_PROMPT_TEMPLATE.format(menu="\n".join(menu_lines))
 
         response = self.client.messages.create(
             model=self.model,

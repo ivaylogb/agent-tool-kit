@@ -69,7 +69,7 @@ def lookup_order(order_id: str) -> dict:
 
 # Two-level capability disclosure
 registry = CapabilityRegistry([lookup_order])
-print(registry.menu())                       # name + summary, ~50 tokens each
+print(registry.menu())                       # name + description + tags, ~50 tokens each
 schemas = registry.schemas_for(["lookup_order"])  # full Anthropic schema
 
 # Drop into agent_eval_loop's AgentRunner — handlers are callables with a tool_schema attr

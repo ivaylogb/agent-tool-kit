@@ -114,21 +114,28 @@ class Tool:
     def menu_entry(self) -> dict[str, Any]:
         """Lightweight tool metadata for progressive disclosure (always loaded).
 
-        Returns name + one-line summary + tags. ~50-100 tokens per tool —
-        cheap enough to keep the entire registry's menu in the system prompt
-        even for large tool catalogues.
+        Shape is deliberately the same as
+        ``agent_context_kit.skills.SkillMetadata.menu_entry()`` so a single
+        classifier prompt template (or router) can consume tool menus and
+        skill menus without special-casing:
+
+            {"name": str, "description": str, "tags": list[str],
+             "when_not_to_use": str | None}
+
+        The description is the tool's raw description (not the schema one
+        with ``WHEN NOT TO USE:`` appended) — ``when_not_to_use`` is
+        returned as its own field for callers that want to render it
+        separately. ``when_not_to_use`` is omitted when unset, matching
+        the skill-menu convention of elided optional fields.
         """
-        return {
+        entry: dict[str, Any] = {
             "name": self.name,
-            "summary": self._summary(),
+            "description": self.description,
             "tags": list(self.tags),
         }
-
-    def _summary(self) -> str:
-        first_line = self.description.split("\n", 1)[0].strip()
-        if len(first_line) > 160:
-            first_line = first_line[:157] + "..."
-        return first_line
+        if self.when_not_to_use:
+            entry["when_not_to_use"] = self.when_not_to_use
+        return entry
 
     def _build_tool_schema(self) -> dict[str, Any]:
         raw_schema = self.input_model.model_json_schema()

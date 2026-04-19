@@ -153,7 +153,7 @@ At scale you can't load every tool's full schema into context. With 20+ tools se
 
 Two-level structure:
 
-- **Menu (always loaded)** — `name + summary + tags`, ~50–100 tokens per tool. The agent sees the catalogue.
+- **Menu (always loaded)** — `name + description + tags` (plus optional `when_not_to_use`), ~50–100 tokens per tool. The agent sees the catalogue. Shape matches `agent-context-kit`'s `SkillMetadata.menu_entry()` so a single classifier prompt consumes both tool and skill menus.
 - **Schemas (on demand)** — full Anthropic-format definitions, loaded only for the subset relevant to the current task.
 
 The selection step is a separate, cheap classifier (`ToolClassifier` uses Haiku by default). It reads the menu and the task, returns a list of selected tool names. The expensive executor model then runs with only those schemas loaded.

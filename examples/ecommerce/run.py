@@ -31,7 +31,7 @@ def main() -> None:
     divider("Capability menu (Level 1 — always loaded)")
     for entry in registry.menu():
         tags = f" [{', '.join(entry['tags'])}]" if entry["tags"] else ""
-        print(f"- {entry['name']}: {entry['summary']}{tags}")
+        print(f"- {entry['name']}: {entry['description']}{tags}")
 
     divider("Schema for one tool (Level 2 — loaded on demand)")
     schemas = registry.schemas_for(["process_return_request"])

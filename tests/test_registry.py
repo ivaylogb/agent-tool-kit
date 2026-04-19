@@ -49,7 +49,7 @@ def test_menu_returns_lightweight_entries():
     menu = reg.menu()
     assert len(menu) == 2
     assert {m["name"] for m in menu} == {"a", "b"}
-    assert all("summary" in m for m in menu)
+    assert all("description" in m for m in menu)
     assert all("tags" in m for m in menu)
 
 

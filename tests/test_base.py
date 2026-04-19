@@ -269,15 +269,38 @@ def test_constructor_rejects_non_pydantic_input_model():
         )
 
 
-def test_menu_entry_truncates_long_description():
-    long_desc = "x" * 500
-    @tool(name="echo", description=long_desc, input_model=EchoInput)
+def test_menu_entry_shape_matches_skill_menu():
+    """menu_entry must match agent-context-kit SkillMetadata.menu_entry()
+    so a single classifier/router prompt can consume both without casing."""
+    @tool(
+        name="echo",
+        description="Echo a value.",
+        when_not_to_use="Don't use for binary data.",
+        tags=["utility"],
+        input_model=EchoInput,
+    )
     def echo(value: str) -> dict:
         return {}
 
     entry = echo.menu_entry
-    assert len(entry["summary"]) <= 160
-    assert entry["summary"].endswith("...")
+    assert entry == {
+        "name": "echo",
+        "description": "Echo a value.",
+        "tags": ["utility"],
+        "when_not_to_use": "Don't use for binary data.",
+    }
+
+
+def test_menu_entry_omits_when_not_to_use_when_unset():
+    @tool(name="echo", description="Echo.", input_model=EchoInput)
+    def echo(value: str) -> dict:
+        return {}
+
+    entry = echo.menu_entry
+    assert "when_not_to_use" not in entry
+    assert entry["name"] == "echo"
+    assert entry["description"] == "Echo."
+    assert entry["tags"] == []
 
 
 # ---- output_filter exception handling (regression for the 1.2/1.3 fix) ----

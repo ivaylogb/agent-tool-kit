@@ -4,9 +4,11 @@ Why this exists: at scale you can't load all tool descriptions into the context
 window. With 20+ tools the agent's selection accuracy degrades — the
 "10% hit rate problem". The registry separates two concerns:
 
-- **Menu** (Level 1, always loaded): name + one-line summary + tags.
-  ~50-100 tokens per tool. The agent — or a routing classifier — sees the
-  catalogue without paying for every full schema.
+- **Menu** (Level 1, always loaded): name + description + tags (+ optional
+  ``when_not_to_use``). ~50-100 tokens per tool. The agent — or a routing
+  classifier — sees the catalogue without paying for every full schema.
+  Shape matches ``agent_context_kit.skills.SkillMetadata.menu_entry()``
+  so tool and skill menus share a classifier prompt template.
 - **Schemas** (Level 2, loaded on demand): full Anthropic-format tool
   definitions. Loaded only for the subset relevant to the current task.
 
