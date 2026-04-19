@@ -50,7 +50,7 @@ def build_weather_tool(
     *,
     api: FakeWeatherAPI | None = None,
     audit_log: AuditLog | None = None,
-    cache: IdempotencyCache | None = None,
+    idempotency_cache: IdempotencyCache | None = None,
     retry_policy: RetryPolicy | None = None,
     breaker: CircuitBreaker | None = None,
     timeout_seconds: float = 1.0,
@@ -66,7 +66,9 @@ def build_weather_tool(
     # would be silently replaced with a fresh one — discarding the caller's choice.
     api = api if api is not None else FakeWeatherAPI()
     audit_log = audit_log if audit_log is not None else AuditLog()
-    cache = cache if cache is not None else IdempotencyCache()
+    idempotency_cache = (
+        idempotency_cache if idempotency_cache is not None else IdempotencyCache()
+    )
     retry_policy = retry_policy if retry_policy is not None else RetryPolicy(
         max_attempts=3,
         base_delay=0.05,
@@ -97,7 +99,7 @@ def build_weather_tool(
         tags=["weather", "external"],
         audit_log=audit_log,
         idempotent=True,
-        idempotency_cache=cache,
+        idempotency_cache=idempotency_cache,
     )
     def get_current_weather(city: str) -> dict[str, Any]:
         raw = defensive_call(
@@ -115,7 +117,7 @@ def build_weather_tool(
     deps = {
         "api": api,
         "audit_log": audit_log,
-        "cache": cache,
+        "idempotency_cache": idempotency_cache,
         "retry_policy": retry_policy,
         "breaker": breaker,
     }
