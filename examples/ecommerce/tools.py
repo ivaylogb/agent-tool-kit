@@ -47,7 +47,6 @@ from agent_tool_kit import (
 from .data import ORDERS, days_since_order, tracking_payload
 
 RETURN_WINDOW_DAYS = 30
-HIGH_VALUE_REFUND_THRESHOLD = 500.0
 
 
 # -- Pydantic input models ----------------------------------------------------
@@ -311,12 +310,14 @@ def _make_escalate(audit: AuditLog) -> Tool:
         priority: str,
         context_summary: str,
     ) -> dict[str, Any]:
+        # priority is constrained to one of these three values by the Pydantic
+        # model — no ``.get`` defaults needed, validation runs first.
         wait_by_priority = {"urgent": 2, "high": 8, "normal": 25}
         queue_by_priority = {"urgent": 3, "high": 7, "normal": 12}
         return {
             "transfer_id": f"TRN-{uuid.uuid4().hex[:8].upper()}",
-            "estimated_wait_time": wait_by_priority.get(priority, 25),
-            "queue_position": queue_by_priority.get(priority, 12),
+            "estimated_wait_time": wait_by_priority[priority],
+            "queue_position": queue_by_priority[priority],
             "accepted_reason": reason,
             "context_summary_received": context_summary,
         }
