@@ -105,3 +105,72 @@ def test_record_serializes_tool_error_in_envelope():
         call_id="c1",
     )
     assert rec.error == err.model_dump(mode="json")
+
+
+def test_audit_log_is_thread_safe(tmp_path: Path):
+    """Concurrent producers must not corrupt _records or interleave JSONL lines."""
+    import threading
+
+    path = tmp_path / "concurrent.jsonl"
+    log = AuditLog(path=path)
+
+    @tool(name="bump", description="Bump.", input_model=Inp, audit_log=log)
+    def bump(x: int) -> dict:
+        return {"x": x}
+
+    n_threads = 8
+    calls_per_thread = 50
+
+    def worker(start: int) -> None:
+        for i in range(start, start + calls_per_thread):
+            bump(x=i)
+
+    threads = [
+        threading.Thread(target=worker, args=(t * calls_per_thread,))
+        for t in range(n_threads)
+    ]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    expected = n_threads * calls_per_thread
+
+    # In-memory records all present.
+    assert len(log.records()) == expected
+
+    # JSONL on disk has one well-formed record per line.
+    with path.open() as f:
+        lines = [line for line in f if line.strip()]
+    assert len(lines) == expected
+    for line in lines:
+        # Each line parses as a complete JSON object — no interleaving.
+        parsed = json.loads(line)
+        assert parsed["tool_name"] == "bump"
+
+
+def test_discard_pending_clears_orphan_timer():
+    log = AuditLog()
+    log.begin("c-orphan")
+    # Caller never produced a record; clean up explicitly.
+    log.discard_pending("c-orphan")
+    # Recording with the same id now reports zero latency — proving the
+    # orphan was actually removed (otherwise latency would be huge).
+    rec = log.record(tool_name="t", arguments={}, call_id="c-orphan")
+    assert rec.latency_ms == 0.0
+
+
+def test_metrics_per_tool_counts_are_ints_not_floats():
+    """Cosmetic regression check: per-tool counts must serialize as ints."""
+    log = AuditLog()
+
+    @tool(name="t", description="x.", input_model=Inp, audit_log=log)
+    def t(x: int) -> dict:
+        return {"x": x}
+
+    t(x=1)
+    t(x=2)
+    m = log.metrics()
+    assert m["per_tool"]["t"]["calls"] == 2
+    assert isinstance(m["per_tool"]["t"]["calls"], int)
+    assert isinstance(m["per_tool"]["t"]["errors"], int)

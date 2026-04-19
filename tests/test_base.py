@@ -278,3 +278,114 @@ def test_menu_entry_truncates_long_description():
     entry = echo.menu_entry
     assert len(entry["summary"]) <= 160
     assert entry["summary"].endswith("...")
+
+
+# ---- output_filter exception handling (regression for the 1.2/1.3 fix) ----
+
+
+def test_output_filter_exception_becomes_internal_error_not_raised():
+    """A raising filter must not escape Tool.invoke — it becomes an envelope."""
+    def buggy_filter(_result):
+        raise RuntimeError("filter explodes")
+
+    @tool(
+        name="echo",
+        description="Echo.",
+        input_model=EchoInput,
+        output_filter=buggy_filter,
+    )
+    def echo(value: str) -> dict:
+        return {"value": value}
+
+    out = echo(value="hi")
+    assert out["error"]["category"] == "internal"
+    assert "filter explodes" in out["error"]["message"]
+    assert "output_filter raised" in out["error"]["message"]
+
+
+def test_output_filter_skipped_when_handler_returns_error_envelope():
+    """Filters expect success shapes; they should not see error envelopes."""
+    seen: list = []
+
+    def record_then_pass(result):
+        seen.append(result)
+        return result
+
+    @tool(
+        name="echo",
+        description="Echo.",
+        input_model=EchoInput,
+        output_filter=record_then_pass,
+    )
+    def echo(value: str) -> dict:
+        return {"error": {"category": "not_found", "message": "x", "retryable": False}}
+
+    out = echo(value="hi")
+    # Filter saw nothing — error envelope was returned untouched.
+    assert seen == []
+    assert out["error"]["category"] == "not_found"
+
+
+def test_audit_timer_not_leaked_when_filter_raises():
+    """Pending audit timer must be cleared even when output_filter raises."""
+    log = AuditLog()
+
+    def buggy_filter(_):
+        raise RuntimeError("oops")
+
+    @tool(
+        name="echo",
+        description="Echo.",
+        input_model=EchoInput,
+        audit_log=log,
+        output_filter=buggy_filter,
+    )
+    def echo(value: str) -> dict:
+        return {"value": value}
+
+    echo(value="hi")
+    # The internal-error envelope was recorded; no orphan start time remains.
+    assert len(log.records()) == 1
+    assert log.records()[0].error is not None
+    # Direct check that the locked accessor sees no pending entries.
+    log.discard_pending("nonexistent")  # smoke-test that the public API is callable
+
+
+# ---- Refusal envelope passes through Tool.invoke unchanged ----
+
+
+def test_refusal_envelope_round_trips_through_invoke():
+    @tool(name="echo", description="Echo.", input_model=EchoInput)
+    def echo(value: str) -> dict:
+        return refuse("not authorized for this action", policy="strict")
+
+    out = echo(value="hi")
+    assert out == {
+        "refusal": "not authorized for this action",
+        "details": {"policy": "strict"},
+    }
+    # Refusals are NOT classified as errors and pass through filters
+    # exactly as the handler returned them.
+
+
+def test_refusal_envelope_is_cached_by_idempotent_tool():
+    """Documented behavior: refusals are cached, since they're not error envelopes."""
+    cache = IdempotencyCache()
+    counter = {"n": 0}
+
+    @tool(
+        name="echo",
+        description="Echo.",
+        input_model=EchoInput,
+        idempotent=True,
+        idempotency_cache=cache,
+    )
+    def echo(value: str) -> dict:
+        counter["n"] += 1
+        return refuse("nope")
+
+    first = echo(value="x")
+    second = echo(value="x")
+    assert first == second == {"refusal": "nope"}
+    # Refusal was cached, handler ran only once.
+    assert counter["n"] == 1

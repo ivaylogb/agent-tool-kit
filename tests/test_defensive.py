@@ -191,3 +191,59 @@ def test_defensive_call_with_retries_succeeds_eventually():
     )
     assert result == "ok"
     assert calls["n"] == 2
+
+
+def test_breaker_counts_user_visible_outcomes_not_retries():
+    """Documented semantics: breaker sees one outcome per defensive_call.
+
+    A failing call with max_attempts=5 records ONE breaker failure, not 5.
+    failure_threshold=2 means the breaker opens after 2 fully-failed
+    defensive_calls (10 internal attempts), not after 2 internal attempts.
+    """
+    breaker = CircuitBreaker(failure_threshold=2, cooldown_seconds=60.0)
+    retry_policy = RetryPolicy(max_attempts=5, base_delay=0, jitter=0)
+
+    def always_fails():
+        raise RuntimeError("nope")
+
+    # First defensive_call: 5 internal attempts, but breaker counts 1 failure.
+    with pytest.raises(ToolException):
+        defensive_call(always_fails, retry_policy=retry_policy, circuit_breaker=breaker)
+    assert breaker.state is CircuitState.CLOSED  # 1 failure < threshold
+
+    # Second defensive_call: another 5 internal attempts, breaker counts another 1.
+    with pytest.raises(ToolException):
+        defensive_call(always_fails, retry_policy=retry_policy, circuit_breaker=breaker)
+    assert breaker.state is CircuitState.OPEN  # 2 failures hits the threshold
+
+    # Third call: blocked by the open breaker, no upstream attempts at all.
+    with pytest.raises(ToolException) as exc:
+        defensive_call(always_fails, retry_policy=retry_policy, circuit_breaker=breaker)
+    assert exc.value.error.category is ErrorCategory.CIRCUIT_OPEN
+
+
+def test_breaker_records_success_after_eventual_retry_recovery():
+    """If retries succeed eventually, the breaker sees a success — not partial failure."""
+    breaker = CircuitBreaker(failure_threshold=1, cooldown_seconds=60.0)
+    breaker.record_failure()  # one prior failure on the books
+    assert breaker.state is CircuitState.OPEN
+    # Now reset for the test scenario: half-open.
+    breaker.record_success()
+    assert breaker.state is CircuitState.CLOSED
+
+    calls = {"n": 0}
+
+    def flakey():
+        calls["n"] += 1
+        if calls["n"] < 3:
+            raise RuntimeError("transient")
+        return "ok"
+
+    result = defensive_call(
+        flakey,
+        retry_policy=RetryPolicy(max_attempts=5, base_delay=0, jitter=0),
+        circuit_breaker=breaker,
+    )
+    assert result == "ok"
+    # Breaker recorded ONE success (the final attempt), no failures.
+    assert breaker.state is CircuitState.CLOSED
