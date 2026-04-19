@@ -124,8 +124,13 @@ def build_weather_tool(
 
 def build_registry(
     api_factory: Callable[[], FakeWeatherAPI] | None = None,
-) -> tuple[CapabilityRegistry, dict[str, Any]]:
-    """Construct the registry plus the dependency bundle for inspection."""
+) -> CapabilityRegistry:
+    """Construct a registry containing the weather tool with fresh dependencies.
+
+    Symmetric with the other examples' ``build_registry`` — returns just the
+    registry. If you need to introspect the breaker state or audit log,
+    construct the tool directly via ``build_weather_tool`` instead.
+    """
     api = (api_factory or FakeWeatherAPI)()
-    weather, deps = build_weather_tool(api=api)
-    return CapabilityRegistry([weather]), deps
+    weather, _deps = build_weather_tool(api=api)
+    return CapabilityRegistry([weather])
