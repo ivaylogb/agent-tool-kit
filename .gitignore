@@ -17,3 +17,4 @@ htmlcov/
 *.swp
 audit_reports/
 audit_reports/
+.venv-audit/
