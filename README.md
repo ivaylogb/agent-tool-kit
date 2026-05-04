@@ -6,7 +6,17 @@ Production patterns and base classes for building reliable LLM tools.
 
 This package gives you the building blocks to design tools that absorb the variance of a stochastic caller (the LLM) and return structured feedback the model can use to self-correct.
 
-It is the second repo in a portfolio of open-source patterns for production agent development. The first, `agent-eval-loop`, handles the **simulate → evaluate → improve** cycle. This one handles the **tools** the agent calls when it acts.
+## Where this fits
+
+Part of [agent-engineering](https://github.com/ivaylogb/agent-engineering) — a four-layer system for production-grade LLM agents.
+
+This kit is **Layer 2: Tool contracts**. It answers: how do we make agent actions reliable?
+
+The other three layers:
+
+- [agent-eval-loop](https://github.com/ivaylogb/agent-eval-loop) — evaluation. How do we know the agent got better?
+- [agent-context-kit](https://github.com/ivaylogb/agent-context-kit) — context runtime. How do we keep the model focused?
+- [agent-skill-kit](https://github.com/ivaylogb/agent-skill-kit) — development workflows. How do we make agent-building repeatable?
 
 ---
 
