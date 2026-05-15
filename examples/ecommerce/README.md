@@ -44,8 +44,8 @@ runner.send_message("Where is order ORD-78234?")
 ```
 
 For the full customer-support workflow (instructions, routines, scenarios),
-swap `agent_eval_loop`'s `examples/customer_support/mocks.py` for
-`get_handlers()` from this module — the tool names match.
+use `get_handlers()` from this module with agent-eval-loop's
+`customer_support` example — the tool names match.
 
 **Error envelope key caveat**: customer_support's `components/tools/v1.yaml`
 documents errors with a `code` field (e.g., `order_not_found`,
