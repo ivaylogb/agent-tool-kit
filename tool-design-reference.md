@@ -1,6 +1,6 @@
 # Tool Design Reference — Key Patterns
 
-This document captures the specific patterns and principles that inform agent-tool-kit's architecture. Drop this in the repo root so Claude Code can reference it during development.
+This document covers tool-design patterns: the principles behind reliable agent tools — asymmetric tool contracts, cognitive offloading, schema-as-feedback, context compression, capability registries, and observability.
 
 ---
 
